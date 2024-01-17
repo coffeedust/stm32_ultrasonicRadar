@@ -114,7 +114,8 @@ int main(void)
   	if(rxData.cmd == 'R') {
   		htim1.Instance->CCR1 = map(rxData.data, 0, 180, 500, 2300);
   		txData.cmd = 'A';
-  		txData.data = 0x123;
+  		txData.data += 10;
+  		txData.data %= 300;
   		transmitPacket(txData);
   	}
   	if(rxData.cmd == 'P') {
