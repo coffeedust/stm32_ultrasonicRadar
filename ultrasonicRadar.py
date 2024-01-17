@@ -43,25 +43,30 @@ def updateScan():
         data = ser.read()
         if data == b'\x02':
             # 두번째 바이트 수신 대기
+            timeout = time.time() + 0.002
+            lostData = False
             while ser.in_waiting < 5:
-                # TODO 타임아웃 처리
-                pass
-            data = ser.read(5)
-            if data[0] == 65:
-                # CRC 검사
-                #crc = b'\x02' + data[0] + data[1] + data[2]
-                if True:
-                    if data[4] == 3:
-                        # 데이터 파싱
-                        mask = b'\x7f'
-                        data_one = bytes([data[1] & mask[0]])
-                        receiveDistance = int.from_bytes(data_one) << 7
-                        data_one = bytes([data[2] & mask[0]])
-                        receiveDistance += int.from_bytes(data_one)
-                        # 물체 업데이트
-                        for obj in objects:
-                            if obj[0] == sendingAngle:
-                                obj[1] = receiveDistance
+                # TODO 타임아웃 처리(1초)
+                if time.time() > timeout:
+                    lostData = True
+                    break
+            if lostData == False:
+                data = ser.read(5)
+                if data[0] == 65:
+                    # CRC 검사
+                    crc = (2 + data[0] + data[1] + data[2]) % 256
+                    if crc == data[3]:
+                        if data[4] == 3:
+                            # 데이터 파싱
+                            mask = b'\x7f'
+                            data_one = bytes([data[1] & mask[0]])
+                            receiveDistance = int.from_bytes(data_one) << 7
+                            data_one = bytes([data[2] & mask[0]])
+                            receiveDistance += int.from_bytes(data_one)
+                            # 물체 업데이트
+                            for obj in objects:
+                                if obj[0] == sendingAngle:
+                                    obj[1] = receiveDistance
                 
     canvas.delete('all')
     # 레이더 선 그리기
