@@ -66,6 +66,51 @@ static void MX_USART2_UART_Init(void);
 long map(long x, long in_min, long in_max, long out_min, long out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
+uint32_t 	IC_Val1 = 0;
+uint32_t 	IC_Val2 = 0;
+uint32_t 	Difference = 0;
+uint8_t 	IsFirstCaptured = 0;
+uint8_t 	Distance = 0;
+
+void delay_us(uint16_t time) {
+	htim11.Instance->CNT = 0;
+	while(htim11.Instance->CNT < time);
+}
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+	if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
+		if(IsFirstCaptured == 0) {
+			IC_Val1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+			IsFirstCaptured = 1;
+			__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_FALLING);
+		}
+		else if(IsFirstCaptured == 1) {
+			IC_Val2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+			htim->Instance->CNT = 0;
+			if(IC_Val2 > IC_Val1) {
+				Difference = IC_Val2 - IC_Val1;
+			}
+			else if(IC_Val2 < IC_Val1) {
+				Difference = (0xffff - IC_Val1) + IC_Val2;
+			}
+			Distance = Difference * 0.034 / 2;
+			IsFirstCaptured = 0;
+
+			__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_RISING);
+			__HAL_TIM_DISABLE_IT(htim, TIM_IT_CC1);
+		}
+	}
+}
+
+uint32_t getDistance() {
+	HAL_GPIO_WritePin(trigger_GPIO_Port, trigger_Pin, 1);
+	delay_us(10);
+	HAL_GPIO_WritePin(trigger_GPIO_Port, trigger_Pin, 0);
+
+	__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);
+	delay_us(100);
+	return Distance;
+}
 /* USER CODE END 0 */
 
 /**
@@ -103,6 +148,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   initUart(&huart2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_Base_Start(&htim11);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -114,8 +161,7 @@ int main(void)
   	if(rxData.cmd == 'R') {
   		htim1.Instance->CCR1 = map(rxData.data, 0, 180, 500, 2300);
   		txData.cmd = 'A';
-  		txData.data += 10;
-  		txData.data %= 300;
+  		txData.data = getDistance();
   		transmitPacket(txData);
   	}
   	if(rxData.cmd == 'P') {
@@ -271,7 +317,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 100-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -325,7 +371,7 @@ static void MX_TIM11_Init(void)
 
   /* USER CODE END TIM11_Init 1 */
   htim11.Instance = TIM11;
-  htim11.Init.Prescaler = 0;
+  htim11.Init.Prescaler = 100-1;
   htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim11.Init.Period = 65535;
   htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
